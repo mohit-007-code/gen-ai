@@ -1,19 +1,22 @@
-# gen-ai: A Lightweight, Extensible RAG Framework
+# RagForge Toolkit: A Lightweight, Extensible RAG Framework
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Coverage: 91%](https://img.shields.io/badge/coverage-91%25-brightgreen.svg)]()
+[![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Coverage: 91%](https://img.shields.io/badge/coverage-91%25-brightgreen.svg)](https://test.pypi.org/project/ragforge-toolkit/)
 
-`gen-ai` is an independent, modular, and developer-friendly Python framework for building Retrieval-Augmented Generation (RAG) applications.
+**RagForge Toolkit** is an independent, modular, and developer-friendly Python framework for building Retrieval-Augmented Generation (RAG) applications.
+
+It provides the complete RAG infrastructure while allowing developers to bring their own AI models, embedding providers, and vector databases.
 
 ---
 
 ## Core Philosophy
 
-> **Users bring their own AI models. Our framework provides the complete RAG infrastructure.**
+> **Users bring their own AI models. RagForge provides the complete RAG infrastructure.**
 
-`gen-ai` does **not** train models, bundle multi-gigabyte weights, or force heavy dependencies. Instead, it provides clean, robust, and decoupled abstractions for:
+RagForge does not train models, bundle multi-gigabyte weights, or force unnecessary dependencies. Instead, it provides clean, robust, and decoupled abstractions for:
+
 - Document loading (TXT, PDF, Markdown, recursive directories)
 - Text chunking (Character and Recursive hierarchical chunkers)
 - Embedding orchestration (OpenAI, Gemini, Ollama, Sentence Transformers, or custom callables)
@@ -28,79 +31,95 @@ No internal dependency on LangChain or LlamaIndex. Built from first principles w
 
 ## Installation
 
-### Base Installation (Zero external AI dependencies)
+### Base Installation
+
+Install the lightweight base package:
+
 ```bash
-pip install gen-ai
+pip install ragforge-toolkit
 ```
-*Includes pure-Python In-Memory vector store, Text & Markdown loaders, PyMuPDF for PDFs, and callable adapters.*
+
+Includes the In-Memory vector store, Text and Markdown loaders, PyMuPDF for PDFs, and callable adapters.
 
 ### Optional Provider Integrations
-Install only the providers your project needs:
+
+Install only the integrations your project needs.
 
 ```bash
-# OpenAI (LLM & Embeddings)
-pip install "gen-ai[openai]"
+# OpenAI
+pip install "ragforge-toolkit[openai]"
 
-# Google Gemini (LLM & Embeddings)
-pip install "gen-ai[gemini]"
+# Google Gemini
+pip install "ragforge-toolkit[gemini]"
 
-# Groq (High-speed LLM)
-pip install "gen-ai[groq]"
+# Groq
+pip install "ragforge-toolkit[groq]"
 
-# Ollama (Local LLM & Embeddings)
-pip install "gen-ai[ollama]"
+# Ollama
+pip install "ragforge-toolkit[ollama]"
 
 # Local Sentence Transformers
-pip install "gen-ai[local]"
+pip install "ragforge-toolkit[local]"
 
-# ChromaDB vector store
-pip install "gen-ai[chroma]"
+# ChromaDB
+pip install "ragforge-toolkit[chroma]"
 
-# FAISS vector store
-pip install "gen-ai[faiss]"
+# FAISS
+pip install "ragforge-toolkit[faiss]"
 
-# All providers & vector stores
-pip install "gen-ai[all]"
+# All providers and vector stores
+pip install "ragforge-toolkit[all]"
 ```
 
 Using `uv`:
+
 ```bash
-uv add "gen-ai[openai,chroma]"
+uv add "ragforge-toolkit[openai,chroma]"
 ```
 
 ---
 
-## Quickstart (Under 30 Seconds)
+## Quickstart
 
-Using custom Python functions without any third-party SDKs:
+Build a basic RAG application using custom Python functions without requiring third-party AI SDKs.
 
 ```python
 from gen_ai import RAG, CallableEmbeddings, CallableLLM
 
-# 1. Bring your own embedding and generation logic
+# 1. Bring your own embedding logic
 embeddings = CallableEmbeddings(
-    embed_documents=lambda texts: [[float(len(t)), 0.0] for t in texts],
+    embed_documents=lambda texts: [
+        [float(len(text)), 0.0] for text in texts
+    ],
     embed_query=lambda text: [float(len(text)), 0.0],
 )
 
+# 2. Bring your own LLM logic
 llm = CallableLLM(
     generate=lambda prompt: (
         "Antigravity is an agentic AI assistant developed by DeepMind."
     )
 )
 
-# 2. Initialize RAG
-rag = RAG(embeddings=embeddings, llm=llm)
+# 3. Initialize RAG
+rag = RAG(
+    embeddings=embeddings,
+    llm=llm,
+)
 
-# 3. Ingest documents (files, folders, or in-memory Document objects)
+# 4. Ingest documents
 rag.add_documents("./documents")
 
-# 4. Ask questions
+# 5. Ask questions
 response = rag.ask("What is Antigravity?")
 
 print("Answer:", response.answer)
+
 for source in response.sources:
-    print(f"- Source: {source.metadata.get('file_name')} | ID: {source.id}")
+    print(
+        f"- Source: {source.metadata.get('file_name')} "
+        f"| ID: {source.id}"
+    )
 ```
 
 ---
@@ -109,26 +128,43 @@ for source in response.sources:
 
 ```text
 Files (TXT, PDF, MD)
-      ↓
-Document Loaders (TextLoader, PDFLoader, MarkdownLoader, DirectoryLoader)
-      ↓
+        |
+        v
+Document Loaders
+(TextLoader, PDFLoader, MarkdownLoader, DirectoryLoader)
+        |
+        v
 Documents (id, content, metadata)
-      ↓
-Chunkers (TextChunker, RecursiveCharacterChunker)
-      ↓
-Chunks (with chunk_index & source_document_id)
-      ↓
-Embedding Adapters (OpenAI, Gemini, Ollama, Sentence Transformers, Callable)
-      ↓
-Vector Stores (InMemory, ChromaDB, FAISS)
-      ↓
-Retriever (top-k, score_threshold, metadata_filter)
-      ↓
+        |
+        v
+Chunkers
+(TextChunker, RecursiveCharacterChunker)
+        |
+        v
+Chunks (chunk_index, source_document_id)
+        |
+        v
+Embedding Adapters
+(OpenAI, Gemini, Ollama, Sentence Transformers, Callable)
+        |
+        v
+Vector Stores
+(InMemory, ChromaDB, FAISS)
+        |
+        v
+Retriever
+(top-k, score_threshold, metadata_filter)
+        |
+        v
 Context Builder & Prompt Template
-      ↓
-LLM Adapters (OpenAI, Gemini, Groq, Ollama, Callable)
-      ↓
-RAGResponse (answer + sources + search_results + metadata)
+        |
+        v
+LLM Adapters
+(OpenAI, Gemini, Groq, Ollama, Callable)
+        |
+        v
+RAGResponse
+(answer, sources, search_results, metadata)
 ```
 
 ---
@@ -136,44 +172,66 @@ RAGResponse (answer + sources + search_results + metadata)
 ## Supported Providers & Adapters
 
 ### 1. OpenAI
+
 ```python
 from gen_ai import RAG
 from gen_ai.adapters.embeddings.openai import OpenAIEmbeddings
 from gen_ai.adapters.llms.openai import OpenAILLM
 
 rag = RAG(
-    embeddings=OpenAIEmbeddings(model="text-embedding-3-small", api_key="sk-..."),
-    llm=OpenAILLM(model="gpt-4o-mini", api_key="sk-..."),
+    embeddings=OpenAIEmbeddings(
+        model="text-embedding-3-small",
+        api_key="YOUR_API_KEY",
+    ),
+    llm=OpenAILLM(
+        model="gpt-4o-mini",
+        api_key="YOUR_API_KEY",
+    ),
 )
+
 rag.add_documents("./handbook.pdf")
+
 response = rag.ask("What is our remote work policy?")
 print(response.answer)
 ```
 
 ### 2. Google Gemini
+
 ```python
 from gen_ai.adapters.embeddings.gemini import GeminiEmbeddings
 from gen_ai.adapters.llms.gemini import GeminiLLM
 
-embeddings = GeminiEmbeddings(api_key="AIza...")
-llm = GeminiLLM(model="gemini-1.5-flash", api_key="AIza...")
+embeddings = GeminiEmbeddings(api_key="YOUR_API_KEY")
+
+llm = GeminiLLM(
+    model="gemini-1.5-flash",
+    api_key="YOUR_API_KEY",
+)
 ```
 
-### 3. Groq (High-Speed Inference)
+### 3. Groq
+
 ```python
 from gen_ai.adapters.llms.groq import GroqLLM
 
-llm = GroqLLM(model="llama-3.3-70b-versatile", api_key="gsk_...")
+llm = GroqLLM(
+    model="llama-3.3-70b-versatile",
+    api_key="YOUR_API_KEY",
+)
 ```
 
 ### 4. Local Models (Sentence Transformers + Ollama)
+
 ```python
 from gen_ai.adapters.embeddings.sentence_transformer import (
     SentenceTransformerEmbeddings,
 )
 from gen_ai.adapters.llms.ollama import OllamaLLM
 
-embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2")
+embeddings = SentenceTransformerEmbeddings(
+    model="all-MiniLM-L6-v2",
+)
+
 llm = OllamaLLM(model="llama3")
 ```
 
@@ -181,8 +239,10 @@ llm = OllamaLLM(model="llama3")
 
 ## Vector Stores
 
-### In-Memory (Zero Dependencies)
-Ideal for testing, fast prototyping, and embedded scripts:
+### In-Memory
+
+Zero-dependency vector storage, ideal for testing, prototyping, and embedded scripts.
+
 ```python
 from gen_ai.vectorstores.in_memory import InMemoryVectorStore
 
@@ -190,7 +250,9 @@ store = InMemoryVectorStore()
 ```
 
 ### ChromaDB
-Persistent and embedded vector database:
+
+Persistent and embedded vector database.
+
 ```python
 from gen_ai.vectorstores.chroma import ChromaVectorStore
 
@@ -201,13 +263,17 @@ store = ChromaVectorStore(
 ```
 
 ### FAISS
-Meta's library for dense vector similarity search:
+
+Efficient dense-vector similarity search.
+
 ```python
 from gen_ai.vectorstores.faiss import FAISSVectorStore
 
 store = FAISSVectorStore(dimension=1536)
+
 # Save and load index locally
 store.save_local("./faiss_index")
+
 loaded_store = FAISSVectorStore.load_local("./faiss_index")
 ```
 
@@ -215,7 +281,8 @@ loaded_store = FAISSVectorStore.load_local("./faiss_index")
 
 ## Ingestion & Chunking
 
-### Loaders
+### Document Loaders
+
 ```python
 from gen_ai.ingestion.loaders import (
     DirectoryLoader,
@@ -224,75 +291,108 @@ from gen_ai.ingestion.loaders import (
     TextLoader,
 )
 
-# Load single file
-docs = PDFLoader().load("annual_report.pdf")
-docs = MarkdownLoader(parse_frontmatter=True).load("readme.md")
-docs = TextLoader().load("notes.txt")
+# Load individual files
+pdf_docs = PDFLoader().load("annual_report.pdf")
 
-# Load directory recursively
-all_docs = DirectoryLoader(recursive=True).load("./docs")
+markdown_docs = MarkdownLoader(
+    parse_frontmatter=True,
+).load("readme.md")
+
+text_docs = TextLoader().load("notes.txt")
+
+# Load directories recursively
+all_docs = DirectoryLoader(
+    recursive=True,
+).load("./docs")
 ```
 
 ### Chunkers
-```python
-from gen_ai.ingestion.chunkers import RecursiveCharacterChunker, TextChunker
 
-# Recursive chunker (maintains paragraphs, sentences, words)
+```python
+from gen_ai.ingestion.chunkers import (
+    RecursiveCharacterChunker,
+    TextChunker,
+)
+
 chunker = RecursiveCharacterChunker(
     chunk_size=500,
     chunk_overlap=50,
 )
-chunks = chunker.split_documents(docs)
+
+chunks = chunker.split_documents(pdf_docs)
 ```
 
 ---
 
 ## Advanced Retrieval & Filtering
 
+Configure retrieval behavior and prompt templates using `RAGConfig`.
+
 ```python
 from gen_ai import RAG, RAGConfig
 
-# Configure thresholds and prompt templates
 config = RAGConfig(
     chunk_size=600,
     chunk_overlap=60,
     top_k=4,
-    score_threshold=0.75,  # Only return chunks with similarity >= 0.75
-    system_prompt="You are a senior technical advisor. Provide concise answers.",
+    score_threshold=0.75,
+    system_prompt=(
+        "You are a senior technical advisor. "
+        "Provide concise answers."
+    ),
 )
 
-rag = RAG(embeddings=embeddings, llm=llm, config=config)
+rag = RAG(
+    embeddings=embeddings,
+    llm=llm,
+    config=config,
+)
+
 rag.add_documents("./docs")
 
-# Filter by metadata tags during query
+# Filter documents using metadata
 response = rag.ask(
     "How does authentication work?",
     metadata_filter={"file_type": "markdown"},
 )
 
-# Search documents directly without calling the LLM
-search_results = rag.search("Authentication", top_k=3)
+# Search documents without calling the LLM
+search_results = rag.search(
+    "Authentication",
+    top_k=3,
+)
+
 for result in search_results:
-    print(f"Score: {result.score:.4f} | Content: {result.document.content[:80]}...")
+    print(
+        f"Score: {result.score:.4f} | "
+        f"Content: {result.document.content[:80]}..."
+    )
 ```
 
 ---
 
 ## Development & Testing
 
-Run tests and coverage:
+Clone the repository and install development dependencies.
+
+### Run Tests
+
 ```bash
 uv run pytest -v
+
 uv run pytest --cov=gen_ai --cov-report=term-missing
 ```
 
-Code quality and formatting:
+### Code Quality
+
 ```bash
 uv run ruff check .
+
 uv run ruff format .
 ```
 
-Build distribution packages:
+### Build Distribution Packages
+
 ```bash
 uv build
 ```
@@ -301,4 +401,9 @@ uv build
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+**RagForge Toolkit** — Modular RAG infrastructure for Python developers.
+
