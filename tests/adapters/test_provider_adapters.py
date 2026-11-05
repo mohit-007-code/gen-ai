@@ -76,11 +76,76 @@ def test_sentence_transformer_embeddings_success():
     assert query == [0.1, 0.2]
 
 
+def test_sentence_transformer_embeddings_model_parameter():
+    mock_st_class = MagicMock()
+    with patch(
+        "sentence_transformers.SentenceTransformer",
+        mock_st_class,
+    ):
+        adapter = SentenceTransformerEmbeddings(model="test-model", device="cpu")
+        assert adapter.model == "test-model"
+        assert adapter.model_name == "test-model"
+        assert adapter.device == "cpu"
+        mock_st_class.assert_called_once_with("test-model", device="cpu")
+
+
+def test_sentence_transformer_embeddings_model_name_parameter():
+    mock_st_class = MagicMock()
+    with patch(
+        "sentence_transformers.SentenceTransformer",
+        mock_st_class,
+    ):
+        adapter = SentenceTransformerEmbeddings(
+            model_name="test-alias-model", device="cuda"
+        )
+        assert adapter.model == "test-alias-model"
+        assert adapter.model_name == "test-alias-model"
+        assert adapter.device == "cuda"
+        # Crucial: model_name must NOT be forwarded as a keyword argument
+        mock_st_class.assert_called_once_with("test-alias-model", device="cuda")
+
+
+def test_sentence_transformer_embeddings_conflicting_parameters():
+    with pytest.raises(ValueError, match="Conflicting parameters provided"):
+        SentenceTransformerEmbeddings(model="model-a", model_name="model-b")
+
+    # Identical values should succeed without conflict
+    mock_st_class = MagicMock()
+    with patch(
+        "sentence_transformers.SentenceTransformer",
+        mock_st_class,
+    ):
+        adapter = SentenceTransformerEmbeddings(
+            model="identical-model", model_name="identical-model"
+        )
+        assert adapter.model == "identical-model"
+        mock_st_class.assert_called_once_with("identical-model", device=None)
+
+
+def test_sentence_transformer_embeddings_custom_model_object():
+    mock_custom_model = MagicMock()
+    mock_custom_model.encode.return_value = [[0.5, 0.6]]
+
+    # Passing custom model via model=
+    adapter1 = SentenceTransformerEmbeddings(model=mock_custom_model)
+    assert adapter1.embed_documents(["doc"]) == [[0.5, 0.6]]
+    assert adapter1.model is mock_custom_model
+
+    # Passing custom model via model_name=
+    adapter2 = SentenceTransformerEmbeddings(model_name=mock_custom_model)
+    assert adapter2.embed_documents(["doc"]) == [[0.5, 0.6]]
+    assert adapter2.model is mock_custom_model
+
+
 def test_sentence_transformer_missing_dependency():
     with patch.dict(sys.modules, {"sentence_transformers": None}):
         with pytest.raises(DependencyError) as exc_info:
             SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2")
         assert exc_info.value.package_name == "sentence-transformers"
+
+        with pytest.raises(DependencyError) as exc_info2:
+            SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+        assert exc_info2.value.package_name == "sentence-transformers"
 
 
 # --- Gemini Embeddings Tests ---
