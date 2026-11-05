@@ -125,6 +125,88 @@ def test_chroma_length_mismatch():
         store.add_documents([Document(content="A")], [[0.1], [0.2]])
 
 
+def test_chroma_negative_cosine_similarity():
+    mock_client = MagicMock()
+    mock_collection = MagicMock()
+    mock_client.get_or_create_collection.return_value = mock_collection
+
+    mock_collection.query.return_value = {
+        "ids": [["doc-opp"]],
+        "documents": [["Opposite meaning"]],
+        "metadatas": [[{}]],
+        "distances": [[2.0]],  # Opposite vector in cosine distance space
+    }
+
+    store = ChromaVectorStore(client=mock_client)
+    results = store.search_with_scores([0.1, 0.2], top_k=1)
+
+    assert len(results) == 1
+    # 1.0 - 2.0 = -1.0; must not be clamped to 0.0
+    assert pytest.approx(results[0].score, 0.001) == -1.0
+    assert results[0].score_type == "similarity"
+
+
+def test_chroma_search_with_none_distance():
+    mock_client = MagicMock()
+    mock_collection = MagicMock()
+    mock_client.get_or_create_collection.return_value = mock_collection
+
+    mock_collection.query.return_value = {
+        "ids": [["doc-1"]],
+        "documents": [["Doc 1"]],
+        "metadatas": [[{}]],
+        "distances": [[None]],
+    }
+
+    store = ChromaVectorStore(client=mock_client)
+    results = store.search_with_scores([0.1, 0.2], top_k=1)
+
+    assert len(results) == 1
+    assert results[0].score is None
+    assert results[0].score_type == "unavailable"
+
+
+def test_chroma_nested_metadata_restoration():
+    from gen_ai.vectorstores.chroma import _restore_metadata_from_chroma
+
+    stored = {
+        "title": "Paper",
+        "nested_dict": '{"section": 1, "topic": "rag"}',
+        "nested_list": '["a", "b", "c"]',
+        "plain_string": "hello",
+    }
+    restored = _restore_metadata_from_chroma(stored)
+    assert restored["title"] == "Paper"
+    assert restored["nested_dict"] == {"section": 1, "topic": "rag"}
+    assert restored["nested_list"] == ["a", "b", "c"]
+    assert restored["plain_string"] == "hello"
+
+
+def test_chroma_where_filtering():
+    mock_client = MagicMock()
+    mock_collection = MagicMock()
+    mock_client.get_or_create_collection.return_value = mock_collection
+
+    mock_collection.query.return_value = {
+        "ids": [["doc-filtered"]],
+        "documents": [["Filtered doc"]],
+        "metadatas": [[{"category": "tech"}]],
+        "distances": [[0.1]],
+    }
+
+    store = ChromaVectorStore(client=mock_client)
+    results = store.search_with_scores([0.1, 0.2], top_k=1, where={"category": "tech"})
+
+    mock_collection.query.assert_called_once_with(
+        query_embeddings=[[0.1, 0.2]],
+        n_results=1,
+        include=["documents", "metadatas", "distances"],
+        where={"category": "tech"},
+    )
+    assert len(results) == 1
+    assert results[0].document.metadata["category"] == "tech"
+
+
 def test_chroma_invalid_top_k():
     mock_client = MagicMock()
     store = ChromaVectorStore(client=mock_client)

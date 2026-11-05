@@ -148,3 +148,89 @@ def test_retriever_store_error():
     retriever = Retriever(embeddings=embeddings, vector_store=mock_store)
     with pytest.raises(RetrievalError, match="Vector store search failed"):
         retriever.retrieve("query")
+
+
+def test_retriever_candidate_expansion():
+    embeddings = CallableEmbeddings(
+        embed_documents=lambda t: [[1.0]],
+        embed_query=lambda t: [1.0],
+    )
+    mock_store = MagicMock()
+    mock_store.search_with_scores.return_value = []
+
+    retriever = Retriever(
+        embeddings=embeddings,
+        vector_store=mock_store,
+        top_k=2,
+        candidate_multiplier=4,
+    )
+
+    # Without filter or threshold -> fetch_k == top_k
+    retriever.retrieve("test")
+    mock_store.search_with_scores.assert_called_with([1.0], top_k=2)
+
+    # With metadata filter -> fetch_k == top_k * candidate_multiplier == 8
+    retriever.retrieve("test", metadata_filter={"cat": "news"})
+    mock_store.search_with_scores.assert_called_with([1.0], top_k=8)
+
+    # With score threshold -> fetch_k == top_k * candidate_multiplier == 8
+    retriever.retrieve("test", score_threshold=0.8)
+    mock_store.search_with_scores.assert_called_with([1.0], top_k=8)
+
+
+def test_retriever_candidate_multiplier_validation():
+    embeddings = CallableEmbeddings(
+        embed_documents=lambda t: [[1.0]],
+        embed_query=lambda t: [1.0],
+    )
+    mock_store = MagicMock()
+
+    with pytest.raises(ValueError, match="candidate_multiplier must be greater than 0"):
+        Retriever(
+            embeddings=embeddings,
+            vector_store=mock_store,
+            candidate_multiplier=0,
+        )
+
+
+def test_retriever_handles_unavailable_score_gracefully(caplog):
+    embeddings = CallableEmbeddings(
+        embed_documents=lambda t: [[1.0]],
+        embed_query=lambda t: [1.0],
+    )
+    mock_store = MagicMock()
+    doc = Document(content="Doc without score")
+    mock_store.search_with_scores.return_value = [
+        SearchResult(document=doc, score=None, score_type="unavailable")
+    ]
+
+    retriever = Retriever(
+        embeddings=embeddings,
+        vector_store=mock_store,
+        score_threshold=0.75,
+    )
+    # Must not raise TypeError, must return result and log warning
+    results = retriever.retrieve("query")
+    assert len(results) == 1
+    assert results[0].document.content == "Doc without score"
+    assert "has unavailable score" in caplog.text
+
+
+def test_retriever_insufficient_candidates_after_filter():
+    embeddings = CallableEmbeddings(
+        embed_documents=lambda t: [[1.0]],
+        embed_query=lambda t: [1.0],
+    )
+    mock_store = MagicMock()
+    doc1 = Document(content="Passes", metadata={"target": True})
+    doc2 = Document(content="Fails", metadata={"target": False})
+    mock_store.search_with_scores.return_value = [
+        SearchResult(document=doc1, score=0.9, score_type="similarity"),
+        SearchResult(document=doc2, score=0.8, score_type="similarity"),
+    ]
+
+    retriever = Retriever(embeddings=embeddings, vector_store=mock_store, top_k=5)
+    results = retriever.retrieve("query", metadata_filter={"target": True})
+    # Requested top_k=5, but only 1 candidate passed; must return 1 without failing
+    assert len(results) == 1
+    assert results[0].document.content == "Passes"

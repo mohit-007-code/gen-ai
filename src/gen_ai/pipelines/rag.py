@@ -86,10 +86,15 @@ class RAGPipeline:
 
     def build_prompt(self, query: str, context: str) -> str:
         """Construct the full prompt for the LLM."""
-        formatted_prompt = self.prompt_template.format(
-            context=context,
-            query=query,
-        )
+        try:
+            formatted_prompt = self.prompt_template.format(
+                context=context,
+                query=query,
+            )
+        except KeyError as exc:
+            raise ValueError(
+                f"Prompt template contains unknown placeholder: {exc}"
+            ) from exc
 
         if self.system_prompt:
             return f"{self.system_prompt.strip()}\n\n{formatted_prompt.strip()}"
@@ -121,9 +126,21 @@ class RAGPipeline:
         except Exception as exc:
             raise RAGError(f"RAG retrieval step failed: {exc}") from exc
 
-        sources = [r.document for r in results]
-        logger.debug("Retrieved %d sources for query context", len(sources))
-        context = self.build_context(sources)
+        # Deduplicate sources while preserving retrieval rank order
+        unique_results: list[SearchResult] = []
+        unique_sources: list[Document] = []
+        seen_ids: set[str] = set()
+
+        for res in results:
+            if res.document.id not in seen_ids:
+                seen_ids.add(res.document.id)
+                unique_results.append(res)
+                unique_sources.append(res.document)
+
+        logger.debug(
+            "Retrieved %d unique sources for query context", len(unique_sources)
+        )
+        context = self.build_context(unique_sources)
         prompt = self.build_prompt(query=clean_query, context=context)
 
         try:
@@ -134,14 +151,23 @@ class RAGPipeline:
         except Exception as exc:
             raise RAGError(f"RAG generation failed: {exc}") from exc
 
+        empty_answer = not answer or not answer.strip()
+        if empty_answer:
+            logger.warning(
+                "LLM returned an empty or whitespace response for query: '%s'",
+                clean_query,
+            )
+
         logger.info("Successfully generated RAG response")
         return RAGResponse(
             query=clean_query,
             answer=answer,
-            sources=sources,
-            results=results,
+            sources=unique_sources,
+            results=unique_results,
             metadata={
                 "retrieved_count": len(results),
-                "has_context": bool(sources),
+                "unique_sources_count": len(unique_sources),
+                "has_context": bool(unique_sources),
+                "empty_response": empty_answer,
             },
         )

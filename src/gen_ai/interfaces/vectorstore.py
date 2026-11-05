@@ -45,16 +45,20 @@ class BaseVectorStore(ABC):
         """
         Retrieve the most similar documents with similarity or distance scores.
 
+        Default implementation falls back to calling search() and returns
+        results with score=None and score_type="unavailable" rather than
+        assigning arbitrary or fake relevance scores.
+
         Args:
             query_embedding: Vector representation of the query.
             top_k: Maximum number of documents to retrieve.
 
         Returns:
-            List of SearchResult objects containing document and score.
+            List of SearchResult objects containing document and score (if available).
         """
         documents = self.search(query_embedding, top_k=top_k)
         return [
-            SearchResult(document=doc, score=1.0, score_type="similarity")
+            SearchResult(document=doc, score=None, score_type="unavailable")
             for doc in documents
         ]
 

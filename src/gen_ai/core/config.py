@@ -16,6 +16,11 @@ class RAGConfig(BaseModel):
     score_threshold: float | None = Field(
         default=None, description="Minimum similarity threshold for retrieval"
     )
+    candidate_multiplier: int = Field(
+        default=3,
+        gt=0,
+        description="Multiplier for candidate retrieval pool during filtered search",
+    )
     system_prompt: str | None = Field(
         default=None, description="Optional custom system prompt"
     )

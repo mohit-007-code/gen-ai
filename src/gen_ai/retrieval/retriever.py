@@ -25,15 +25,21 @@ class Retriever:
         top_k: int = 3,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        candidate_multiplier: int = 3,
     ) -> None:
         if top_k <= 0:
             raise ValueError(f"top_k must be greater than 0, received {top_k}")
+        if candidate_multiplier <= 0:
+            raise ValueError(
+                f"candidate_multiplier must be greater than 0, received {candidate_multiplier}"
+            )
 
         self.embeddings = embeddings
         self.vector_store = vector_store
         self.top_k = top_k
         self.score_threshold = score_threshold
         self.metadata_filter = metadata_filter
+        self.candidate_multiplier = candidate_multiplier
 
     def retrieve(
         self,
@@ -44,6 +50,12 @@ class Retriever:
     ) -> list[SearchResult]:
         """
         Embed the query and retrieve top-k matching SearchResult items.
+
+        Note on top_k guarantee:
+            When score_threshold or metadata_filter is specified, top_k acts as an
+            upper bound, NOT a strict guarantee. If fewer candidates satisfy the
+            filters within the candidate retrieval window (candidate_multiplier * top_k),
+            fewer results will be returned.
         """
         if not query or not query.strip():
             raise ValueError("Query cannot be empty or whitespace only")
@@ -74,7 +86,14 @@ class Retriever:
             raise RetrievalError(f"Failed to generate query embedding: {exc}") from exc
 
         try:
-            fetch_k = effective_top_k * 3 if effective_filter else effective_top_k
+            candidate_expansion = (
+                effective_filter is not None or effective_threshold is not None
+            )
+            fetch_k = (
+                effective_top_k * self.candidate_multiplier
+                if candidate_expansion
+                else effective_top_k
+            )
             results = self.vector_store.search_with_scores(query_vector, top_k=fetch_k)
         except Exception as exc:
             raise RetrievalError(f"Vector store search failed: {exc}") from exc
@@ -83,12 +102,16 @@ class Retriever:
         for result in results:
             # Score threshold filter
             if effective_threshold is not None:
-                if (
+                if result.score is None or result.score_type == "unavailable":
+                    logger.warning(
+                        "Score threshold %s specified but result for doc '%s' has unavailable score. Retaining candidate.",
+                        effective_threshold,
+                        result.document.id,
+                    )
+                elif (
                     result.score_type == "similarity"
                     and result.score < effective_threshold
-                ):
-                    continue
-                if (
+                ) or (
                     result.score_type == "distance"
                     and result.score > effective_threshold
                 ):

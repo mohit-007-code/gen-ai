@@ -8,9 +8,11 @@ from gen_ai.core.exceptions import DependencyError, VectorStoreError
 from gen_ai.core.search_result import SearchResult
 from gen_ai.interfaces.vectorstore import BaseVectorStore
 
+EMPTY_METADATA_KEY = "__gen_ai_empty__"
+
 
 def _clean_metadata_for_chroma(metadata: dict[str, Any]) -> dict[str, Any]:
-    """ChromaDB requires metadata values to be str, int, float, or bool."""
+    """ChromaDB requires metadata values to be str, int, float, or bool. Empty dicts are rejected."""
     cleaned: dict[str, Any] = {}
     for k, v in metadata.items():
         if isinstance(v, (str, int, float, bool)):
@@ -19,7 +21,29 @@ def _clean_metadata_for_chroma(metadata: dict[str, Any]) -> dict[str, Any]:
             continue
         else:
             cleaned[k] = json.dumps(v)
+    if not cleaned:
+        cleaned[EMPTY_METADATA_KEY] = True
     return cleaned
+
+
+def _restore_metadata_from_chroma(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    """Restore metadata retrieved from ChromaDB, unpacking nested JSON values and sentinel empty markers."""
+    if not metadata:
+        return {}
+    restored: dict[str, Any] = {}
+    for k, v in metadata.items():
+        if k == EMPTY_METADATA_KEY:
+            continue
+        if isinstance(v, str) and v.startswith(("{", "[")):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, (dict, list)):
+                    restored[k] = parsed
+                    continue
+            except (json.JSONDecodeError, ValueError):
+                pass
+        restored[k] = v
+    return restored
 
 
 class ChromaVectorStore(BaseVectorStore):
@@ -78,30 +102,41 @@ class ChromaVectorStore(BaseVectorStore):
 
         ids = [doc.id for doc in documents]
         texts = [doc.content for doc in documents]
-        metadatas = [_clean_metadata_for_chroma(doc.metadata) for doc in documents]
+        cleaned_metadatas = [
+            _clean_metadata_for_chroma(doc.metadata) for doc in documents
+        ]
+        all_empty = all(m == {EMPTY_METADATA_KEY: True} for m in cleaned_metadatas)
+        metadatas_to_pass = None if all_empty else cleaned_metadatas
 
         try:
             self._collection.upsert(
                 ids=ids,
                 documents=texts,
                 embeddings=embeddings,
-                metadatas=metadatas,
+                metadatas=metadatas_to_pass,
             )
         except Exception as exc:
             raise VectorStoreError(f"Chroma add_documents failed: {exc}") from exc
 
     def search_with_scores(
-        self, query_embedding: list[float], top_k: int = 3
+        self,
+        query_embedding: list[float],
+        top_k: int = 3,
+        where: dict[str, Any] | None = None,
     ) -> list[SearchResult]:
         if top_k <= 0:
             raise ValueError(f"top_k must be greater than 0, received {top_k}")
 
+        query_kwargs: dict[str, Any] = {
+            "query_embeddings": [query_embedding],
+            "n_results": top_k,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if where is not None:
+            query_kwargs["where"] = where
+
         try:
-            query_results = self._collection.query(
-                query_embeddings=[query_embedding],
-                n_results=top_k,
-                include=["documents", "metadatas", "distances"],
-            )
+            query_results = self._collection.query(**query_kwargs)
         except Exception as exc:
             raise VectorStoreError(f"Chroma query failed: {exc}") from exc
 
@@ -115,25 +150,38 @@ class ChromaVectorStore(BaseVectorStore):
             retrieved_ids, retrieved_docs, retrieved_metas, distances, strict=False
         ):
             # Chroma cosine distance = 1 - cosine_similarity
-            similarity = max(0.0, 1.0 - float(dist)) if dist is not None else 1.0
+            # Preserving negative cosine similarity without clamping to 0.0
+            if dist is not None:
+                similarity = 1.0 - float(dist)
+                score_type = "similarity"
+                score = similarity
+            else:
+                score = None
+                score_type = "unavailable"
+
             doc = Document(
                 id=doc_id,
                 content=text,
-                metadata=meta or {},
+                metadata=_restore_metadata_from_chroma(meta),
             )
             results.append(
                 SearchResult(
                     document=doc,
-                    score=similarity,
-                    score_type="similarity",
-                    metadata={"distance": dist},
+                    score=score,
+                    score_type=score_type,
+                    metadata={"distance": dist} if dist is not None else {},
                 )
             )
 
         return results
 
-    def search(self, query_embedding: list[float], top_k: int = 3) -> list[Document]:
-        results = self.search_with_scores(query_embedding, top_k=top_k)
+    def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 3,
+        where: dict[str, Any] | None = None,
+    ) -> list[Document]:
+        results = self.search_with_scores(query_embedding, top_k=top_k, where=where)
         return [r.document for r in results]
 
     def delete(self, ids: list[str]) -> None:

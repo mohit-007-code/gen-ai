@@ -21,6 +21,15 @@ def test_search_result_creation():
     assert result.metadata == {}
 
 
+def test_search_result_unavailable_score():
+    doc = Document(content="Doc without score")
+    result = SearchResult(document=doc, score=None, score_type="unavailable")
+
+    assert result.document.content == "Doc without score"
+    assert result.score is None
+    assert result.score_type == "unavailable"
+
+
 def test_search_result_rejects_extra_fields():
     doc = Document(content="Sample text")
     with pytest.raises(ValidationError):
@@ -33,6 +42,7 @@ def test_rag_config_defaults():
     assert config.chunk_overlap is None
     assert config.top_k == 3
     assert config.score_threshold is None
+    assert config.candidate_multiplier == 3
     assert config.system_prompt is None
     assert config.prompt_template is None
 

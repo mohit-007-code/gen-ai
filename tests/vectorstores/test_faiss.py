@@ -115,3 +115,54 @@ def test_faiss_save_and_load_local(tmp_path: Path):
 def test_faiss_load_local_not_found(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         FAISSVectorStore.load_local(tmp_path / "nonexistent")
+
+
+def test_faiss_invalid_dimension():
+    with pytest.raises(ValueError, match="dimension must be a positive integer"):
+        FAISSVectorStore(dimension=0)
+
+    with pytest.raises(ValueError, match="dimension must be a positive integer"):
+        FAISSVectorStore(dimension=-5)
+
+
+def test_faiss_query_dimension_mismatch():
+    mock_faiss = MagicMock()
+    mock_index = MagicMock()
+    mock_faiss.IndexFlatIP.return_value = mock_index
+
+    store = FAISSVectorStore(dimension=3, faiss_module=mock_faiss)
+    doc = Document(content="Sample")
+    store.add_documents([doc], [[1.0, 0.0, 0.0]])
+
+    with pytest.raises(VectorStoreError, match="Query dimension mismatch"):
+        store.search_with_scores([1.0, 0.0], top_k=1)
+
+
+def test_faiss_duplicate_id_update():
+    mock_faiss = MagicMock()
+    mock_index = MagicMock()
+    mock_faiss.IndexFlatIP.return_value = mock_index
+
+    store = FAISSVectorStore(dimension=2, faiss_module=mock_faiss)
+    doc1 = Document(id="fixed-id", content="Original content")
+    doc2 = Document(id="fixed-id", content="Updated content")
+
+    store.add_documents([doc1], [[1.0, 0.0]])
+    assert len(store) == 1
+    assert store._id_to_doc["fixed-id"].content == "Original content"
+
+    store.add_documents([doc2], [[0.0, 1.0]])
+    assert len(store) == 1
+    assert store._id_to_doc["fixed-id"].content == "Updated content"
+    assert store._doc_ids == ["fixed-id"]
+
+
+def test_faiss_corrupted_json_load(tmp_path: Path):
+    mock_faiss = MagicMock()
+    save_dir = tmp_path / "corrupted_index"
+    save_dir.mkdir(parents=True)
+    (save_dir / "index.faiss").write_bytes(b"index_bytes")
+    (save_dir / "documents.json").write_text("{invalid json", encoding="utf-8")
+
+    with pytest.raises(VectorStoreError, match="Failed to load FAISS index"):
+        FAISSVectorStore.load_local(save_dir, faiss_module=mock_faiss)

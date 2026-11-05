@@ -96,3 +96,37 @@ def test_in_memory_empty_documents():
     store = InMemoryVectorStore()
     store.add_documents([], [])
     assert len(store) == 0
+
+
+def test_in_memory_negative_cosine_similarity():
+    store = InMemoryVectorStore()
+    doc_pos = Document(content="Positive")
+    doc_neg = Document(content="Opposite")
+    doc_orth = Document(content="Orthogonal")
+
+    store.add_documents(
+        [doc_pos, doc_neg, doc_orth],
+        [[1.0, 0.0], [-1.0, 0.0], [0.0, 1.0]],
+    )
+
+    results = store.search_with_scores([1.0, 0.0], top_k=3)
+    assert len(results) == 3
+    # Check ranking order: highest similarity to lowest
+    assert results[0].document.content == "Positive"
+    assert pytest.approx(results[0].score, 0.001) == 1.0
+
+    assert results[1].document.content == "Orthogonal"
+    assert pytest.approx(results[1].score, 0.001) == 0.0
+
+    assert results[2].document.content == "Opposite"
+    assert pytest.approx(results[2].score, 0.001) == -1.0
+
+
+def test_in_memory_zero_vector_query():
+    store = InMemoryVectorStore()
+    doc = Document(content="Sample")
+    store.add_documents([doc], [[1.0, 2.0]])
+
+    results = store.search_with_scores([0.0, 0.0], top_k=1)
+    assert len(results) == 1
+    assert results[0].score == 0.0

@@ -34,6 +34,7 @@ class RAG:
         chunk_overlap: int | None = None,
         top_k: int = 3,
         score_threshold: float | None = None,
+        candidate_multiplier: int = 3,
         system_prompt: str | None = None,
         prompt_template: str | None = None,
         config: RAGConfig | None = None,
@@ -49,6 +50,7 @@ class RAG:
                 chunk_overlap=chunk_overlap,
                 top_k=top_k,
                 score_threshold=score_threshold,
+                candidate_multiplier=candidate_multiplier,
                 system_prompt=system_prompt,
                 prompt_template=prompt_template,
             )
@@ -74,6 +76,7 @@ class RAG:
             vector_store=self.vector_store,
             top_k=self.config.top_k,
             score_threshold=self.config.score_threshold,
+            candidate_multiplier=self.config.candidate_multiplier,
         )
         self.pipeline = RAGPipeline(
             retriever=self.retriever,

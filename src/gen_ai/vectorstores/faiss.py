@@ -31,6 +31,9 @@ class FAISSVectorStore(BaseVectorStore):
         faiss_module: Any = None,
         normalize: bool = True,
     ) -> None:
+        if dimension <= 0:
+            raise ValueError(f"dimension must be a positive integer, got {dimension}")
+
         self.dimension = dimension
         self.normalize = normalize
 

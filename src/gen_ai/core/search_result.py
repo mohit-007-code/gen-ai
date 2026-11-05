@@ -13,10 +13,13 @@ class SearchResult(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     document: Document = Field(description="The retrieved document")
-    score: float = Field(description="Score indicating relevance or distance")
+    score: float | None = Field(
+        default=None,
+        description="Score indicating relevance or distance, or None if unavailable",
+    )
     score_type: str = Field(
         default="similarity",
-        description="Type of score: 'similarity' (higher is better) or 'distance' (lower is better)",
+        description="Type of score: 'similarity' (higher is better), 'distance' (lower is better), or 'unavailable'",
     )
     metadata: dict[str, object] = Field(
         default_factory=dict,

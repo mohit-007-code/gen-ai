@@ -89,8 +89,8 @@ def test_search_with_scores_default():
     results = store.search_with_scores(query_embedding=[0.1, 0.2, 0.3], top_k=2)
     assert len(results) == 2
     assert results[0].document.content == "Python"
-    assert results[0].score == 1.0
-    assert results[0].score_type == "similarity"
+    assert results[0].score is None
+    assert results[0].score_type == "unavailable"
 
 
 def test_delete_documents():
