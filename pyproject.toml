@@ -1,6 +1,6 @@
 
 [project]
-name = "gen-ai"
+name = "ragforge-toolkit"
 version = "0.1.0"
 description = "A simple and extensible Python framework for building GenAI applications."
 readme = "README.md"
@@ -36,6 +36,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.9",
     "hatchling>=1.27",
+    "twine>=7.0.0",
 ]
 
 [build-system]
